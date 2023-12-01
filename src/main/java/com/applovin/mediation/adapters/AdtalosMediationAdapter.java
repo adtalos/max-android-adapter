@@ -5,16 +5,13 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
-import com.applovin.enterprise.apps.demoapp.BuildConfig;
 import com.applovin.mediation.MaxAdFormat;
 import com.applovin.mediation.adapter.MaxAdViewAdapter;
 import com.applovin.mediation.adapter.MaxAdapterError;
-import com.applovin.mediation.adapter.MaxAppOpenAdapter;
 import com.applovin.mediation.adapter.MaxInterstitialAdapter;
 import com.applovin.mediation.adapter.MaxNativeAdAdapter;
 import com.applovin.mediation.adapter.MaxRewardedAdapter;
 import com.applovin.mediation.adapter.listeners.MaxAdViewAdapterListener;
-import com.applovin.mediation.adapter.listeners.MaxAppOpenAdapterListener;
 import com.applovin.mediation.adapter.listeners.MaxInterstitialAdapterListener;
 import com.applovin.mediation.adapter.listeners.MaxRewardedAdapterListener;
 import com.applovin.mediation.adapter.parameters.MaxAdapterInitializationParameters;
@@ -35,11 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AdtalosMediationAdapter
         extends MediationAdapterBase
-        implements MaxAdViewAdapter, MaxInterstitialAdapter, MaxRewardedAdapter, MaxNativeAdAdapter, MaxAppOpenAdapter {
-    private static final String BANNER_TEST_AD_ID = "209A03F87BA3B4EB82BEC9E5F8B41383";
-    private static final String APP_OPEN_TEST_AD_ID = "5C3DD65A809B08A2D6CF3DEFBC7E09C7";
-    private static final String INTERSTITIAL_TEST_AD_ID = "C28BE5F062F476CC0C73C4F0ED333A72";
-    private static final String REWARDED_TEST_AD_ID = "527E187C5DEA600C35309759469ADAA8";
+        implements MaxAdViewAdapter, MaxInterstitialAdapter, MaxRewardedAdapter, MaxNativeAdAdapter {
     private static final AtomicBoolean initialized = new AtomicBoolean();
     private static InitializationStatus status;
 
@@ -51,7 +44,8 @@ public class AdtalosMediationAdapter
     }
 
     @Override
-    public void initialize(MaxAdapterInitializationParameters maxAdapterInitializationParameters, Activity activity, OnCompletionListener onCompletionListener) {
+    public void initialize(final MaxAdapterInitializationParameters maxAdapterInitializationParameters,
+            final Activity activity, final OnCompletionListener onCompletionListener) {
         log("Initializing Adtalos SDK...");
         if (initialized.compareAndSet(false, true)) {
             Context context = getContext(activity);
@@ -62,7 +56,8 @@ public class AdtalosMediationAdapter
     }
 
     private Context getContext(@Nullable Activity activity) {
-        // NOTE: `activity` can only be null in 11.1.0+, and `getApplicationContext()` is introduced in 11.1.0
+        // NOTE: `activity` can only be null in 11.1.0+, and `getApplicationContext()`
+        // is introduced in 11.1.0
         return (activity != null) ? activity.getApplicationContext() : getApplicationContext();
     }
 
@@ -73,26 +68,12 @@ public class AdtalosMediationAdapter
 
     @Override
     public String getAdapterVersion() {
-        return BuildConfig.VERSION_NAME;
-    }
-
-    public Privacy getPrivacy(MaxAdapterParameters parameters) {
-        Privacy.Builder builder = new Privacy.Builder();
-        if (parameters.hasUserConsent()) {
-            builder.setGDPR(PrivacyStatus.AUTHORIZED);
-        }
-        if (!parameters.isAgeRestrictedUser()) {
-            builder.setCOPPA(PrivacyStatus.AUTHORIZED);
-        }
-        if (parameters.isDoNotSell()) {
-            builder.setCCPA(PrivacyStatus.UNAUTHORIZED);
-        }
-        return builder.build();
+        return SDK.VERSION + ".0";
     }
 
     @Override
     public void onDestroy() {
-        for (View adview: adViews.values()) {
+        for (View adview : adViews.values()) {
             if (adview != null) {
                 adview.destroy();
             }
@@ -101,49 +82,79 @@ public class AdtalosMediationAdapter
         controllers.clear();
     }
 
-    @Override
-    public void loadAdViewAd(MaxAdapterResponseParameters parameters, MaxAdFormat maxAdFormat, Activity activity, MaxAdViewAdapterListener adapterListener) {
-        String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = BANNER_TEST_AD_ID;
+    private Privacy getPrivacy(MaxAdapterParameters parameters) {
+        Privacy.Builder builder = new Privacy.Builder();
+        Boolean hasUserConsent = parameters.hasUserConsent();
+        if (hasUserConsent == null) {
+            builder.setGDPR(PrivacyStatus.UNKNOWN);
+        } else if (hasUserConsent.booleanValue()) {
+            builder.setGDPR(PrivacyStatus.AUTHORIZED);
+        } else {
+            builder.setGDPR(PrivacyStatus.UNAUTHORIZED);
         }
-        View adView = adViews.get(placementId);
-        if (adView == null) {
-            adView = new View(getContext(activity));
-            if (maxAdFormat == MaxAdFormat.BANNER) {
-                adView.setSize(Size.BANNER);
-            } else {
-                adView.setSize(new Size(maxAdFormat.getSize().getWidth(), maxAdFormat.getSize().getHeight()));
+        Boolean isAgeRestrictedUser = parameters.isAgeRestrictedUser();
+        if (isAgeRestrictedUser == null) {
+            builder.setCOPPA(PrivacyStatus.UNKNOWN);
+        } else if (isAgeRestrictedUser.booleanValue()) {
+            builder.setCOPPA(PrivacyStatus.UNAUTHORIZED);
+        } else {
+            builder.setCOPPA(PrivacyStatus.AUTHORIZED);
+        }
+        Boolean isDoNotSell = parameters.isDoNotSell();
+        if (isDoNotSell == null) {
+            builder.setCCPA(PrivacyStatus.UNKNOWN);
+        } else if (isDoNotSell.booleanValue()) {
+            builder.setCCPA(PrivacyStatus.UNAUTHORIZED);
+        } else {
+            builder.setCCPA(PrivacyStatus.AUTHORIZED);
+        }
+        return builder.build();
+    }
+
+    @Override
+    public void loadAdViewAd(final MaxAdapterResponseParameters parameters, final MaxAdFormat maxAdFormat,
+            final Activity activity, final MaxAdViewAdapterListener adapterListener) {
+        final String placementId = parameters.getThirdPartyAdPlacementId();
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                View adView = adViews.get(placementId);
+                if (adView == null) {
+                    adView = new View(getContext(activity));
+                    if (maxAdFormat == MaxAdFormat.BANNER) {
+                        adView.setSize(Size.BANNER);
+                    } else {
+                        adView.setSize(new Size(maxAdFormat.getSize().getWidth(), maxAdFormat.getSize().getHeight()));
+                    }
+                    adView.setListener(new AdViewListener(maxAdFormat, placementId, adapterListener));
+                    adViews.put(placementId, adView);
+                }
+                SDK.setPrivacy(getPrivacy(parameters));
+                adView.load(placementId, false);
             }
-            adView.setListener(new AdViewListener(maxAdFormat, placementId, adapterListener));
-            adViews.put(placementId, adView);
-        }
-        SDK.setPrivacy(getPrivacy(parameters));
-        adView.load(placementId, false);
+        });
     }
 
     @Override
-    public void loadInterstitialAd(MaxAdapterResponseParameters parameters, Activity activity, MaxInterstitialAdapterListener adapterListener) {
-        String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = INTERSTITIAL_TEST_AD_ID;
-        }
-        Controller interstitialAd = controllers.get(placementId);
-        if (interstitialAd == null) {
-            interstitialAd = new Controller(placementId, Controller.INTERSTITIAL);
-            interstitialAd.setListener(new InterstitialAdListener(placementId, adapterListener));
-            controllers.put(placementId, interstitialAd);
-        }
-        SDK.setPrivacy(getPrivacy(parameters));
-        interstitialAd.load();
+    public void loadInterstitialAd(final MaxAdapterResponseParameters parameters, final Activity activity,
+            final MaxInterstitialAdapterListener adapterListener) {
+        final String placementId = parameters.getThirdPartyAdPlacementId();
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Controller interstitialAd = new Controller(placementId, Controller.INTERSTITIAL);
+                interstitialAd.setListener(new InterstitialAdListener(placementId, adapterListener));
+                controllers.put(placementId, interstitialAd);
+                SDK.setPrivacy(getPrivacy(parameters));
+                interstitialAd.load();
+            }
+        });
     }
 
     @Override
-    public void showInterstitialAd(MaxAdapterResponseParameters parameters, Activity activity, MaxInterstitialAdapterListener adapterListener) {
+    public void showInterstitialAd(final MaxAdapterResponseParameters parameters, final Activity activity,
+            final MaxInterstitialAdapterListener adapterListener) {
         String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = INTERSTITIAL_TEST_AD_ID;
-        }
         Controller interstitialAd = controllers.get(placementId);
         if (interstitialAd == null) {
             log("Interstitial ad not ready.");
@@ -153,57 +164,25 @@ public class AdtalosMediationAdapter
     }
 
     @Override
-    public void loadAppOpenAd(MaxAdapterResponseParameters parameters, Activity activity, MaxAppOpenAdapterListener adapterListener) {
-        String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = APP_OPEN_TEST_AD_ID;
-        }
-        Controller splashAd = controllers.get(placementId);
-        if (splashAd == null) {
-            splashAd = new Controller(placementId, Controller.SPLASH);
-            splashAd.setListener(new AppOpenAdListener(placementId, adapterListener));
-            controllers.put(placementId, splashAd);
-        }
-        SDK.setPrivacy(getPrivacy(parameters));
-        splashAd.load();
+    public void loadRewardedAd(final MaxAdapterResponseParameters parameters, final Activity activity,
+            final MaxRewardedAdapterListener adapterListener) {
+        final String placementId = parameters.getThirdPartyAdPlacementId();
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Controller rewardedAd = new Controller(placementId, Controller.SPLASH);
+                rewardedAd.setListener(new RewardedAdListener(placementId, adapterListener));
+                controllers.put(placementId, rewardedAd);
+                SDK.setPrivacy(getPrivacy(parameters));
+                rewardedAd.load();
+            }
+        });
     }
 
     @Override
-    public void showAppOpenAd(MaxAdapterResponseParameters parameters, Activity activity, MaxAppOpenAdapterListener adapterListener) {
+    public void showRewardedAd(final MaxAdapterResponseParameters parameters, final Activity activity,
+            final MaxRewardedAdapterListener adapterListener) {
         String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = APP_OPEN_TEST_AD_ID;
-        }
-        Controller splashAd = controllers.get(placementId);
-        if (splashAd == null) {
-            log("App open ad not ready.");
-            adapterListener.onAppOpenAdDisplayFailed(MaxAdapterError.AD_DISPLAY_FAILED);
-        }
-        splashAd.show();
-    }
-
-    @Override
-    public void loadRewardedAd(MaxAdapterResponseParameters parameters, Activity activity, MaxRewardedAdapterListener adapterListener) {
-        String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = REWARDED_TEST_AD_ID;
-        }
-        Controller rewardedAd = controllers.get(placementId);
-        if (rewardedAd == null) {
-            rewardedAd = new Controller(placementId, Controller.SPLASH);
-            rewardedAd.setListener(new RewardedAdListener(placementId, adapterListener));
-            controllers.put(placementId, rewardedAd);
-        }
-        SDK.setPrivacy(getPrivacy(parameters));
-        rewardedAd.load();
-    }
-
-    @Override
-    public void showRewardedAd(MaxAdapterResponseParameters parameters, Activity activity, MaxRewardedAdapterListener adapterListener) {
-        String placementId = parameters.getThirdPartyAdPlacementId();
-        if (parameters.isTesting()) {
-            placementId = APP_OPEN_TEST_AD_ID;
-        }
         Controller rewardedAd = controllers.get(placementId);
         if (rewardedAd == null) {
             log("Rewarded ad not ready.");
@@ -368,71 +347,6 @@ public class AdtalosMediationAdapter
         public void onClosed() {
             log("interstitial ad " + placementId + " closed.");
             adapterListener.onInterstitialAdHidden();
-        }
-    }
-
-    private class AppOpenAdListener implements Listener {
-        private final String placementId;
-        private final MaxAppOpenAdapterListener adapterListener;
-
-        public AppOpenAdListener(String placementId, MaxAppOpenAdapterListener adapterListener) {
-            this.placementId = placementId;
-            this.adapterListener = adapterListener;
-        }
-
-        public void onRendered() {
-            log("app open ad " + placementId + " rendered.");
-        }
-
-        @Override
-        public void onImpressionFinished() {
-            log("app open ad " + placementId + " impression finished.");
-            adapterListener.onAppOpenAdDisplayed();
-        }
-
-        @Override
-        public void onImpressionFailed() {
-            log("app open ad " + placementId + " impression failed.");
-            adapterListener.onAppOpenAdDisplayFailed(MaxAdapterError.AD_DISPLAY_FAILED);
-        }
-
-        @Override
-        public void onImpressionReceivedError(int i, String s) {
-            log("app open ad " + placementId + " impression received error: " + s + "(" + i + ").");
-        }
-
-        @Override
-        public void onLoaded() {
-            log("app open ad " + placementId + " loaded.");
-            adapterListener.onAppOpenAdLoaded();
-        }
-
-        @Override
-        public void onFailedToLoad(Exception e) {
-            log("app open ad " + placementId + " failed to load: " + e.getLocalizedMessage() + ".");
-            adapterListener.onAppOpenAdLoadFailed(toMaxError(e));
-        }
-
-        @Override
-        public void onOpened() {
-            log("app open ad " + placementId + " opened.");
-        }
-
-        @Override
-        public void onClicked() {
-            log("app open ad " + placementId + " clicked.");
-            adapterListener.onAppOpenAdClicked();
-        }
-
-        @Override
-        public void onLeftApplication() {
-            log("app open ad " + placementId + " left application.");
-        }
-
-        @Override
-        public void onClosed() {
-            log("app open ad " + placementId + " closed.");
-            adapterListener.onAppOpenAdHidden();
         }
     }
 
